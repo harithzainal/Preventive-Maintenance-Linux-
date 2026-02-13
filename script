@@ -1,0 +1,147 @@
+#!/bin/bash
+
+echo "================================================="
+echo "        LINUX PREVENTIVE MAINTENANCE REPORT"
+echo "================================================="
+echo "Date & Time: $(date)"
+echo "Hostname: $(hostname)"
+echo "================================================="
+
+#################################
+# 2. CPU & PROCESS HEALTH
+#################################
+echo ""
+echo "2. CPU & PROCESS HEALTH"
+
+CPU_IDLE=$(top -bn1 | grep "Cpu(s)" | awk '{print $8}' | cut -d. -f1)
+AVG_CPU=$((100 - CPU_IDLE))
+
+PEAK_CPU=$(top -bn1 | grep "Cpu(s)" | awk '{print 100 - $8}')
+
+PROC_COUNT=$(ps -e --no-headers | wc -l)
+
+echo "Average CPU Usage: $AVG_CPU %"
+echo "Peak CPU Usage: $PEAK_CPU %"
+echo "Number of active processes: $PROC_COUNT"
+
+#################################
+# 3. MEMORY & PAGING PERFORMANCE
+#################################
+echo ""
+echo "3. MEMORY & PAGING PERFORMANCE"
+
+TOTAL_MEM=$(free -g | awk '/Mem/ {print $2}')
+FREE_MEM=$(free -g | awk '/Mem/ {print $7}')
+MEM_USAGE=$(free | awk '/Mem/ {printf("%.0f", $3/$2 * 100)}')
+
+echo "Total Physical Memory: $TOTAL_MEM GB"
+echo "Available Memory: $FREE_MEM GB"
+echo "Memory Usage: $MEM_USAGE %"
+
+#################################
+# 4. DISK I/O & STORAGE CAPACITY
+#################################
+echo ""
+echo "4. DISK I/O & STORAGE CAPACITY"
+
+DISK_TOTAL=$(df -h / | awk 'NR==2 {print $2}')
+DISK_FREE=$(df -h / | awk 'NR==2 {print $4}')
+DISK_USED=$(df -h / | awk 'NR==2 {print $5}')
+
+DISK_RW=$(iostat -dx 1 1 | awk '/sda/ {print $6+$7}')
+DISK_QUEUE=$(iostat -dx 1 1 | awk '/sda/ {print $9}')
+
+echo "C: Drive - Total: $DISK_TOTAL, Free: $DISK_FREE ($DISK_USED)"
+echo "Disk Read/Write Speed: $DISK_RW KB/s"
+echo "Average Disk Queue Length: $DISK_QUEUE"
+
+#################################
+# 5. LOG MANAGEMENT
+#################################
+echo ""
+echo "5. LOG MANAGEMENT"
+
+LOG_SIZE=$(du -sh /var/log | awk '{print $1}')
+OLDEST_LOG=$(find /var/log -type f -printf '%T+ %p\n' | sort | head -n 1 | awk '{print $1}')
+
+OLDEST_SEC=$(date -d "$OLDEST_LOG" +%s)
+NOW_SEC=$(date +%s)
+RETENTION_DAYS=$(( (NOW_SEC - OLDEST_SEC) / 86400 ))
+
+echo "Log Directory Size: $LOG_SIZE"
+echo "Log Growth Rate: Manual daily comparison required (MB/day)"
+echo "Oldest Log File: $OLDEST_LOG"
+echo "Log Retention Period: $RETENTION_DAYS days"
+
+#################################
+# 6. NETWORK CONNECTIVITY & THROUGHPUT
+#################################
+echo ""
+echo "6. NETWORK CONNECTIVITY & THROUGHPUT"
+
+IFACE=$(ip route | grep default | awk '{print $5}' | head -n 1)
+
+NET_SPEED=$(ethtool $IFACE 2>/dev/null | grep Speed | awk '{print $2}')
+NET_STATS=$(sar -n DEV 1 1 | grep $IFACE | tail -n 1)
+
+TX=$(echo $NET_STATS | awk '{print $5}')
+RX=$(echo $NET_STATS | awk '{print $6}')
+
+PKT_ERR=$(ip -s link show $IFACE | awk '/RX:/ {getline; print $3}')
+
+LATENCY=$(ping -c 4 8.8.8.8 | tail -1 | awk -F '/' '{print $5}')
+
+echo "Network Adapter Speed ($IFACE): $NET_SPEED"
+echo "Bytes Sent/sec: $TX KB/s"
+echo "Bytes Received/sec: $RX KB/s"
+echo "Packet Errors: $PKT_ERR"
+echo "Network Latency to 8.8.8.8: $LATENCY ms"
+
+#################################
+# 7. OPERATING SYSTEM HEALTH
+#################################
+echo ""
+echo "7. OPERATING SYSTEM HEALTH"
+
+CRIT_EVENTS=$(journalctl -p crit --since "7 days ago" | wc -l)
+WARN_EVENTS=$(journalctl -p warning --since "7 days ago" | wc -l)
+
+UPTIME=$(uptime -p)
+LAST_REBOOT=$(who -b | awk '{print $3, $4}')
+
+echo "Critical Events (Last 7 days): $CRIT_EVENTS"
+echo "Warning Events (Last 7 days): $WARN_EVENTS"
+echo "System Uptime: $UPTIME"
+echo "Last Reboot: $LAST_REBOOT"
+
+#################################
+# 8. TIME SYNCHRONIZATION & SERVICES
+#################################
+echo ""
+echo "8. TIME SYNCHRONIZATION & SERVICES"
+
+TIMEZONE=$(timedatectl | grep "Time zone" | awk '{print $3}')
+TIMESET=$(date)
+LAST_SYNC=$(timedatectl show-timesync --all 2>/dev/null | grep LastSync | cut -d= -f2)
+
+CRITICAL_SERVICES=("sshd" "cron" "rsyslog" "systemd-timesyncd")
+RUNNING=0
+
+for svc in "${CRITICAL_SERVICES[@]}"; do
+  systemctl is-active --quiet $svc && RUNNING=$((RUNNING+1))
+done
+
+TOTAL=${#CRITICAL_SERVICES[@]}
+
+echo "Time Zone: $TIMEZONE"
+echo "Time Set: $TIMESET"
+echo "Last Sync: ${LAST_SYNC:-N/A}"
+echo "Critical Services Running: $RUNNING/$TOTAL"
+
+echo ""
+echo "================ END OF PM REPORT ================"
+
+
+PROFF SERVICES RUNNING FOR TIMEZONE 
+
+systemctl status vsftpd sshd chronyd firewalld --no-pager
